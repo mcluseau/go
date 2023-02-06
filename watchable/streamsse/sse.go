@@ -12,12 +12,19 @@ import (
 	"m.cluseau.fr/go/watchable"
 )
 
+type Update struct {
+	Set   json.RawMessage       `json:"set,omitempty"`
+	Patch []jsonpatch.Operation `json:"p,omitempty"`
+	Err   string                `json:"err,omitempty"`
+}
+
+func StreamHandler[T any](wable *watchable.Watchable[T]) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		Stream(w, req, wable)
+	})
+}
+
 func Stream[T any](w http.ResponseWriter, req *http.Request, wable *watchable.Watchable[T]) {
-	type watchUpdate struct {
-		Set   json.RawMessage       `json:"set,omitempty"`
-		Patch []jsonpatch.Operation `json:"p,omitempty"`
-		Err   string                `json:"err,omitempty"`
-	}
 
 	tickInterval := time.Second / 20 // 20 FPS by default
 	if reqInterval := req.FormValue("tick"); reqInterval != "" {
@@ -45,7 +52,7 @@ func Stream[T any](w http.ResponseWriter, req *http.Request, wable *watchable.Wa
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	send := func(update watchUpdate) (ok bool) {
+	send := func(update Update) (ok bool) {
 		ba, err := json.Marshal(update)
 		if err != nil {
 			log.Print("WARNING: failed to marshal update: ", err)
@@ -69,7 +76,7 @@ func Stream[T any](w http.ResponseWriter, req *http.Request, wable *watchable.Wa
 
 	currentValue, ok := <-watch
 	if !ok {
-		send(watchUpdate{Err: "watch closed before any value was set"})
+		send(Update{Err: "watch closed before any value was set"})
 		return
 	}
 
@@ -78,21 +85,23 @@ func Stream[T any](w http.ResponseWriter, req *http.Request, wable *watchable.Wa
 		ba, err := json.Marshal(currentValue)
 		if err != nil {
 			log.Print("WARNING: failed to marshal value, failing: ", err)
-			send(watchUpdate{Err: "marshal error: " + err.Error()})
+			send(Update{Err: "marshal error: " + err.Error()})
 			return
 		}
 
-		if !send(watchUpdate{Set: ba}) {
+		if !send(Update{Set: ba}) {
 			return
 		}
 
 		prevBytes = ba
 	}
 
-	ticker := time.NewTicker(tickInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(time.Second)
+	timer.Stop()
 
-	gotUpdate := false
+	defer timer.Stop()
+
+	firstNew := true
 
 	for {
 		select {
@@ -100,18 +109,18 @@ func Stream[T any](w http.ResponseWriter, req *http.Request, wable *watchable.Wa
 			return
 
 		case currentValue = <-watch:
-			gotUpdate = true
-
-		case <-ticker.C:
-			if !gotUpdate {
-				break
+			if firstNew {
+				timer.Reset(tickInterval)
+				firstNew = false
 			}
-			gotUpdate = false
+
+		case <-timer.C:
+			firstNew = true
 
 			ba, err := json.Marshal(currentValue)
 			if err != nil {
 				log.Print("WARNING: failed to marshal value, failing: ", err)
-				send(watchUpdate{Err: "marshal error: " + err.Error()})
+				send(Update{Err: "marshal error: " + err.Error()})
 				return
 			}
 
@@ -122,12 +131,14 @@ func Stream[T any](w http.ResponseWriter, req *http.Request, wable *watchable.Wa
 			patch, err := jsonpatch.CreatePatch(prevBytes, ba)
 			if err != nil {
 				log.Print("WARNING: failed to compute patch, failing: ", err)
-				send(watchUpdate{Err: "compute patch error: " + err.Error()})
+				send(Update{Err: "compute patch error: " + err.Error()})
 				return
 			}
 
-			if !send(watchUpdate{Patch: patch}) {
-				return
+			if len(patch) != 0 {
+				if !send(Update{Patch: patch}) {
+					return
+				}
 			}
 
 			prevBytes = ba
