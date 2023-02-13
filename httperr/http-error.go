@@ -52,6 +52,10 @@ func (err Error) Error() string {
 	return err.Message
 }
 
+func (err Error) Any() bool {
+	return err != Error{}
+}
+
 func (err Error) WriteJSON(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(err.Status)
