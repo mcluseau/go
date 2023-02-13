@@ -18,7 +18,7 @@ var _ error = Error{}
 var stdErrs = map[int]Error{}
 
 // NewStd should only be called in "init" context (func init() or global declarations)
-func NewStd(status, code int, message string) (err Error) {
+func NewStd(code, status int, message string) (err Error) {
 	if prev, ok := stdErrs[code]; ok {
 		panic(fmt.Errorf("error code already taken: %d (previous: %d %q)", code, prev.Status, prev.Message))
 	}
