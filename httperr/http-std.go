@@ -5,6 +5,10 @@ import (
 	"net/http"
 )
 
+func StdStatus(statusCode int) Error {
+	return NewStd(statusCode, statusCode, http.StatusText(statusCode))
+}
+
 func Internal(err error) Error {
 	return New(http.StatusInternalServerError, err)
 }
