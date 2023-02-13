@@ -13,30 +13,30 @@ type Error struct {
 	Message string `json:"message"`
 }
 
-var _ error = &Error{}
+var _ error = Error{}
 
-var stdErrs = map[int]*Error{}
+var stdErrs = map[int]Error{}
 
 // NewStd should only be called in "init" context (func init() or global declarations)
-func NewStd(status, code int, message string) (err *Error) {
+func NewStd(status, code int, message string) (err Error) {
 	if prev, ok := stdErrs[code]; ok {
 		panic(fmt.Errorf("error code already taken: %d (previous: %d %q)", code, prev.Status, prev.Message))
 	}
 
-	err = &Error{status, code, message}
+	err = Error{status, code, message}
 	stdErrs[code] = err
 
 	return
 }
 
-func AllStd() (errs []*Error) {
+func AllStd() (errs []Error) {
 	keys := make([]int, 0, len(stdErrs))
 	for i := range stdErrs {
 		keys = append(keys, i)
 	}
 	sort.Ints(keys)
 
-	errs = make([]*Error, len(stdErrs))
+	errs = make([]Error, len(stdErrs))
 	for i, k := range keys {
 		errs[i] = stdErrs[k]
 	}
@@ -44,15 +44,15 @@ func AllStd() (errs []*Error) {
 	return
 }
 
-func New(status int, err error) *Error {
-	return &Error{Status: status, Message: err.Error()}
+func New(status int, err error) Error {
+	return Error{Status: status, Message: err.Error()}
 }
 
-func (err *Error) Error() string {
+func (err Error) Error() string {
 	return err.Message
 }
 
-func (err *Error) WriteJSON(w http.ResponseWriter) {
+func (err Error) WriteJSON(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(err.Status)
 	json.NewEncoder(w).Encode(err)
