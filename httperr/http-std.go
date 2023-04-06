@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+var NotFound = StdStatus(http.StatusNotFound)
+
 func StdStatus(statusCode int) Error {
 	return NewStd(statusCode, statusCode, http.StatusText(statusCode))
 }
