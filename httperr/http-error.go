@@ -10,7 +10,8 @@ import (
 type Error struct {
 	Status  int    `json:"-"`
 	Code    int    `json:"code,omitempty"`
-	Message string `json:"message"`
+	Message string `json:"message,omitempty"`
+	Details any    `json:"details,omitempty"`
 }
 
 var _ error = Error{}
@@ -23,7 +24,7 @@ func NewStd(code, status int, message string) (err Error) {
 		panic(fmt.Errorf("error code already taken: %d (previous: %d %q)", code, prev.Status, prev.Message))
 	}
 
-	err = Error{status, code, message}
+	err = Error{status, code, message, nil}
 	stdErrs[code] = err
 
 	return
@@ -53,7 +54,9 @@ func (err Error) Error() string {
 }
 
 func (err Error) Any() bool {
-	return err != Error{}
+	return err.Code != 0 ||
+		err.Message != "" ||
+		err.Details != nil
 }
 
 func (err Error) WriteJSON(w http.ResponseWriter) {
